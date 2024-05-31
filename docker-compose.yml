@@ -1,0 +1,64 @@
+x-volumes:
+  &default-volumes
+    # Define all volumes you would like to have real-time mounted into the docker containers
+    volumes:
+      - ./mytheme:/var/lib/ghost/mytheme:delegated ### Local overrides to mount host filesystem. Automatically removed in CI and PROD.
+      - ghost:/var/lib/ghost/content
+      - db:/var/lib/mysql
+
+x-environment:
+  &default-environment
+    # Route that should be used locally, if you are using pygmy, this route *must* end with .docker.amazee.io
+    LAGOON_ROUTE: &default-url http://${COMPOSE_PROJECT_NAME:-ghost-on-lagoon}.docker.amazee.io
+    # Uncomment if you like to have the system behave like in production
+    #LAGOON_ENVIRONMENT_TYPE: production
+
+x-user:
+  &default-user
+    # The default user under which the containers should run. Change this if you are on linux and run with another user than id `1000`
+    user: '1000'
+
+volumes:
+  db:
+    {}
+  ghost:
+    {}
+
+services:
+
+  node:
+    build:
+      context: .
+      dockerfile: lagoon/node.dockerfile
+    restart: always
+    labels:
+      lagoon.type: node-persistent
+      lagoon.persistent.name: node # mount the persistent storage of nginx into this container
+      lagoon.persistent: /var/lib/ghost/content/ # location where the persistent storage should be mounted
+      lando.type: node-persistent
+    << : *default-volumes
+    environment:
+      << : *default-environment
+    depends_on:
+      - mysql
+    ports:
+      - "3000"
+    networks:
+      - amazeeio-network
+      - default
+
+  mysql:
+    image: testlagoon/mysql-8.0:pr-308
+    labels:
+      lagoon.type: mariadb
+    ports:
+      - "3306" # exposes the port 3306 with a random local port, find it with `docker-compose port mariadb 3306`
+    << : *default-user # uses the defined user from top
+    environment:
+      << : *default-environment
+    volumes:
+      - db:/var/lib/mysql
+
+networks:
+  amazeeio-network:
+    external: true
